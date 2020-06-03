@@ -165,6 +165,26 @@ flashinitramfs.cpio.lzma: flashinitramfs.cpio
 	lzma -f -k $<
 
 flashinitramfs.cpio: Makefile
+	go run github.com/u-root/u-root  -o $@ \
+		-files /usr/bin/lsusb \
+		-files /usr/bin/lspci \
+		-files /var/lib/usbutils/usb.ids \
+		-uinitcmd=/bbin/console \
+		all \
+		github.com/u-root/u-root/cmds/exp/console \
+
+		echo not bringing by hand \
+		github.com/u-root/u-root/cmds/boot/pxeboot \
+		github.com/u-root/u-root/cmds/core/cat \
+		github.com/u-root/u-root/cmds/core/elvish \
+		github.com/u-root/u-root/cmds/core/init \
+		github.com/u-root/u-root/cmds/core/ip \
+		github.com/u-root/u-root/cmds/core/ls \
+		github.com/u-root/u-root/cmds/core/kexec \
+		github.com/u-root/u-root/cmds/core/pci \
+		github.com/u-root/u-root/cmds/core/wget \
+
+oflashinitramfs.cpio: Makefile
 	go run github.com/u-root/u-root  -o $@ -build=bb \
 		-uinitcmd=/bbin/pxeboot \
 		github.com/u-root/u-root/cmds/boot/pxeboot \
@@ -181,13 +201,9 @@ flashinitramfs.cpio: Makefile
 # It depends on the kernel setting the IP address.
 # You need ip=dhcp OR ip=fixed.ip.address.here in the command line
 cpu.cpio.lzma: Makefile
-	go run github.com/u-root/u-root -o cpu.cpio -build=bb -initcmd=cpud \
-		-files ~/.ssh/cpu_rsa.pub:key.pub \
-		-files class_key.pub:authorized_keys \
-		-files classhostkey:id_rsa \
+	go run github.com/u-root/u-root -o cpu.cpio -build=bb -initcmd=cpud -files ~/.ssh/cpu_rsa.pub:key.pub \
 		-defaultsh="" \
-		github.com/u-root/u-root/cmds/exp/rush \
-		github.com/u-root/cpu/cmds/cpud 
+		github.com/u-root/cpu/cmds/cpud
 	lzma -f -k cpu.cpio
 
 # this target builds an initramfs with all of u-root, AND all of /bin, /usr/bin, /sbin, /usr/sbin, /etc
@@ -209,11 +225,8 @@ sshd.cpio.lzma:  Makefile
 	lzma -f -k sshd.cpio
 	ls -l sshd.cpio.*
 
-flashkernel: linuxboot-linux.tiny.config flashinitramfs.cpio.lzma Makefile
+flashkernel: flashkernel.config flashinitramfs.cpio.lzma Makefile
 	cp $< linux/.config
-	echo CONFIG_CMDLINE_BOOL=y >> linux/.config
-	echo CONFIG_CMDLINE_OVERRIDE=y >> linux/.config
-	stat -c 'CONFIG_CMDLINE="noefi ip=dhcp earlyprintk=ttyS0,115200,keep console=ttyS0,115200 netconsole=6666@192.168.0.2/,6666@192.168.0.1/ initrdmem=0xff968000,%s"' flashinitramfs.cpio.lzma >> linux/.config
 	(cd linux && make oldconfig && make -j32)
 	cp linux/arch/x86/boot/bzImage $@
 
@@ -242,9 +255,6 @@ geturoot:
 	go get -u github.com/u-root/u-root
 	go get -u github.com/u-root/cpu/...
 
-pxeserver:
-	sudo `go env GOPATH`/bin/pxeserver  -tftp-dir . -bootfilename none  -http-dir . -interface $(NETWORK)
-
 # Serve the combined sshd-kernel and sshd-initramfs image. This includes flashrom
 sshd-pxeserver:
 	echo Consider Disabling any system services ...
@@ -259,7 +269,5 @@ cpu-pxeserver:
 	echo e.g. sudo systemctl stop isc-dhcp-server
 	sudo `go env GOPATH`/bin/pxeserver  -tftp-dir . -bootfilename cpukernel  -http-dir . -interface $(NETWORK)
 
-ssh2022:
-	ssh -i class_key -p 2022 root@up
 ssh:
-	ssh -i class_key -p 22 root@up
+	ssh -i class_key -p 2022 root@up
